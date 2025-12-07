@@ -13,9 +13,9 @@ export async function registerRoutes(
     try {
       const { addr } = req.params;
       const limit = parseInt(req.query.limit as string) || 50;
-      
+
       const data = await fetchAddressData(addr, limit);
-      
+
       const scan = await storage.createScan({
         address: addr,
         scanDepth: limit,
@@ -23,13 +23,13 @@ export async function registerRoutes(
         derivedCount: 0,
         status: "completed"
       });
-      
+
       await storage.createLog({
         scanId: scan.id,
         logType: "api",
         message: `Fetched ${data.txs.length} transactions for ${addr}`
       });
-      
+
       res.json({
         scanId: scan.id,
         address: data.address,
@@ -77,30 +77,50 @@ export async function registerRoutes(
 
   app.post("/api/synthetic/from-txid", async (req, res) => {
     try {
-      const { txid } = req.body;
-      
+      const { txid, options } = req.body;
+
       if (!txid || typeof txid !== 'string') {
         return res.status(400).json({ error: "txid is required" });
       }
-      
+
       const identity = deriveSyntheticIdentity(txid);
+
+      // If options are provided, return only requested fields
+      if (options) {
+        const result: any = {
+          wif: identity.wif
+        };
+
+        if (options.deriveEth) {
+          result.ethAddress = identity.ethAddress;
+        }
+
+        if (options.deriveBtc) {
+          result.btcLegacy = identity.btcLegacy;
+          result.btcSegwit = identity.btcSegwit;
+          result.btcBech32 = identity.btcBech32;
+        }
+
+        return res.json(result);
+      }
+
       res.json(identity);
     } catch (error: any) {
-      console.error("Synthetic derivation error:", error);
-      res.status(400).json({ error: error.message || "Derivation failed" });
+      console.error("Derivation error:", error);
+      res.status(500).json({ error: error.message || "Derivation failed" });
     }
   });
 
   app.post("/api/synthetic/batch", async (req, res) => {
     try {
       const { txids, scanId } = req.body;
-      
+
       if (!Array.isArray(txids) || txids.length === 0) {
         return res.status(400).json({ error: "txids array is required" });
       }
-      
+
       const identities = deriveBatch(txids);
-      
+
       if (scanId) {
         await storage.createDerivedIdentities(
           identities.map(id => ({
@@ -113,16 +133,16 @@ export async function registerRoutes(
             btcBech32: id.btcBech32
           }))
         );
-        
+
         await storage.updateScan(scanId, { derivedCount: identities.length });
-        
+
         await storage.createLog({
           scanId: scanId,
           logType: "keygen",
           message: `Derived ${identities.length} synthetic identities`
         });
       }
-      
+
       res.json({ identities, count: identities.length });
     } catch (error: any) {
       console.error("Batch derivation error:", error);
@@ -151,11 +171,11 @@ export async function registerRoutes(
     try {
       const { heightOrHash } = req.params;
       const block = await fetchBlock(heightOrHash);
-      
+
       if (!block) {
         return res.status(404).json({ error: "Block not found" });
       }
-      
+
       res.json({
         id: block.hash,
         height: block.height,
@@ -180,16 +200,16 @@ export async function registerRoutes(
   app.post("/api/balance/check-batch", async (req, res) => {
     try {
       const { addresses } = req.body;
-      
+
       if (!Array.isArray(addresses)) {
         return res.status(400).json({ error: "addresses array required" });
       }
-      
+
       const results = await Promise.all(
         addresses.map(async (addr: { btc?: string; eth?: string; id?: number }) => {
           const btcBalance = addr.btc ? await fetchBtcBalance(addr.btc) : { balance: 0 };
           const ethBalance = addr.eth ? await fetchEthBalance(addr.eth) : { balance: 0 };
-          
+
           return {
             id: addr.id,
             btc: btcBalance.balance,
@@ -197,7 +217,7 @@ export async function registerRoutes(
           };
         })
       );
-      
+
       res.json({ results });
     } catch (error) {
       console.error("Batch balance error:", error);

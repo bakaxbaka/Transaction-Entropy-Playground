@@ -44,6 +44,7 @@ export default function Dashboard() {
 
   const [mempoolMonitoring, setMempoolMonitoring] = useState(false); // Added for mempool monitoring
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
+  const [mempoolLoading, setMempoolLoading] = useState(false);
   const [blockQuery, setBlockQuery] = useState("");
   const [blockData, setBlockData] = useState<BlockData | null>(null);
   const [recentBlocks, setRecentBlocks] = useState<BlockData[]>([]);

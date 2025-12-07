@@ -160,3 +160,39 @@ export function syntheticToDerivedIdentity(synthetic: SyntheticIdentity): Derive
     balance: { btc: 0, eth: 0 }
   };
 }
+
+export async function deriveFromTxId(
+  txid: string, 
+  options: { deriveEth: boolean; deriveBtc: boolean }
+): Promise<{ 
+  wif: string; 
+  ethAddress?: string; 
+  btcLegacy?: string; 
+  btcSegwit?: string; 
+  btcBech32?: string; 
+} | null> {
+  try {
+    const response = await fetch('/api/synthetic/from-txid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txid, options })
+    });
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    const identity = await response.json();
+    
+    return {
+      wif: identity.wif,
+      ethAddress: options.deriveEth ? identity.ethAddress : undefined,
+      btcLegacy: options.deriveBtc ? identity.btcLegacy : undefined,
+      btcSegwit: options.deriveBtc ? identity.btcSegwit : undefined,
+      btcBech32: options.deriveBtc ? identity.btcBech32 : undefined,
+    };
+  } catch (error) {
+    console.error('Failed to derive from txid:', error);
+    return null;
+  }
+}
