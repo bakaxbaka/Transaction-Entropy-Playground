@@ -108,12 +108,15 @@ export default function Dashboard() {
 
   const checkBalances = async () => {
     addLog("Checking balances for all derived identities...", "info");
-    const updated = [...derivedData];
+    const updated = derivedData.map(item => ({
+      ...item,
+      balance: { ...item.balance }
+    }));
     let checkedCount = 0;
     
     for (let i = 0; i < updated.length; i++) {
       try {
-        if (deriveOptions.deriveEth && updated[i].ethAddress) {
+        if (deriveOptions.deriveEth && updated[i].ethAddress && updated[i].ethAddress !== "DISABLED") {
           const ethResult = await fetchEthBalance(updated[i].ethAddress);
           if (ethResult.balance > 0) {
             addLog(`HIT! Found ${ethResult.balance} ETH at ${updated[i].ethAddress}`, "success");
@@ -130,13 +133,14 @@ export default function Dashboard() {
         }
         
         checkedCount++;
-        setDerivedData([...updated]);
       } catch (error) {
         addLog(`Warning: Failed to check balance for identity ${i + 1}`, "error");
       }
       
       await new Promise(r => setTimeout(r, 100));
     }
+    
+    setDerivedData([...updated]);
     addLog(`Balance scan complete. Checked ${checkedCount} identities.`, "success");
   };
 
