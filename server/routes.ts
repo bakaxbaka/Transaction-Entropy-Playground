@@ -57,10 +57,10 @@ export async function registerRoutes(
     try {
       const { addr } = req.params;
       const data = await fetchBtcBalance(addr);
-      res.json(data);
+      res.json({ address: addr, balance: data.balance });
     } catch (error) {
       console.error("BTC balance error:", error);
-      res.status(500).json({ error: "Failed to fetch balance", balance: 0 });
+      res.status(500).json({ error: "Failed to fetch balance", address: req.params.addr, balance: 0 });
     }
   });
 
@@ -68,10 +68,10 @@ export async function registerRoutes(
     try {
       const { addr } = req.params;
       const data = await fetchEthBalance(addr);
-      res.json(data);
+      res.json({ address: addr, balance: data.balance });
     } catch (error) {
       console.error("ETH balance error:", error);
-      res.status(500).json({ error: "Failed to fetch balance", balance: 0 });
+      res.status(500).json({ error: "Failed to fetch balance", address: req.params.addr, balance: 0 });
     }
   });
 
@@ -102,7 +102,7 @@ export async function registerRoutes(
       const identities = deriveBatch(txids);
       
       if (scanId) {
-        const dbIdentities = await storage.createDerivedIdentities(
+        await storage.createDerivedIdentities(
           identities.map(id => ({
             scanId: scanId,
             sourceTxId: id.sourceTxId,
@@ -121,11 +121,9 @@ export async function registerRoutes(
           logType: "keygen",
           message: `Derived ${identities.length} synthetic identities`
         });
-        
-        res.json({ identities: dbIdentities, count: identities.length });
-      } else {
-        res.json({ identities, count: identities.length });
       }
+      
+      res.json({ identities, count: identities.length });
     } catch (error: any) {
       console.error("Batch derivation error:", error);
       res.status(500).json({ error: error.message || "Batch derivation failed" });
@@ -135,10 +133,17 @@ export async function registerRoutes(
   app.get("/api/mempool/live", async (_req, res) => {
     try {
       const data = await fetchMempool();
-      res.json(data);
+      res.json({
+        count: data.txs.length,
+        vsize: data.size,
+        totalFee: data.txs.reduce((sum, tx) => sum + (tx.fee || 0), 0),
+        feeHistogram: [],
+        txs: data.txs,
+        feeRates: data.feeRates
+      });
     } catch (error) {
       console.error("Mempool error:", error);
-      res.status(500).json({ error: "Failed to fetch mempool data", size: 0, txs: [], feeRates: { low: 5, medium: 10, high: 20 } });
+      res.status(500).json({ error: "Failed to fetch mempool data", count: 0, vsize: 0, totalFee: 0, feeHistogram: [], txs: [], feeRates: { low: 5, medium: 10, high: 20 } });
     }
   });
 
@@ -151,7 +156,21 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Block not found" });
       }
       
-      res.json(block);
+      res.json({
+        id: block.hash,
+        height: block.height,
+        version: 0,
+        timestamp: block.time,
+        tx_count: block.txCount,
+        size: block.size,
+        weight: block.weight,
+        merkle_root: "",
+        previousblockhash: "",
+        mediantime: block.time,
+        nonce: 0,
+        bits: 0,
+        difficulty: 0
+      });
     } catch (error) {
       console.error("Block fetch error:", error);
       res.status(500).json({ error: "Failed to fetch block data" });

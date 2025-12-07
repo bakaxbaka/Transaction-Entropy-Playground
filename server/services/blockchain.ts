@@ -163,7 +163,11 @@ export async function fetchBlock(heightOrHash: string): Promise<BlockData | null
   try {
     let hash = heightOrHash;
     
-    if (/^\d+$/.test(heightOrHash)) {
+    if (heightOrHash === 'tip' || heightOrHash === 'latest') {
+      const tipRes = await fetch('https://mempool.space/api/blocks/tip/hash');
+      if (!tipRes.ok) return null;
+      hash = await tipRes.text();
+    } else if (/^\d+$/.test(heightOrHash)) {
       const hashRes = await fetch(`https://mempool.space/api/block-height/${heightOrHash}`);
       if (!hashRes.ok) return null;
       hash = await hashRes.text();
