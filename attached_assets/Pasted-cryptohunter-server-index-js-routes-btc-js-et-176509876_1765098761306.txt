@@ -1,0 +1,346 @@
+cryptohunter/
+│
+├── server/
+│   ├── index.js
+│   ├── routes/
+│   │   ├── btc.js
+│   │   ├── eth.js
+│   │   ├── mempool.js
+│   │   ├── block.js
+│   │   └── synthetic.js
+│   ├── services/
+│   │   ├── fetchBTC.js
+│   │   ├── fetchETH.js
+│   │   ├── mempoolService.js
+│   │   ├── blockService.js
+│   │   └── syntheticKeygen.js   ← SAFE: only synthetic entropy
+│   ├── utils/
+│   │   ├── txidToBytes.js
+│   │   ├── hexToPriv.js
+│   │   ├── deriveETH.js
+│   │   ├── deriveBTC.js
+│   │   ├── checksum.js
+│   │   └── apiLimiter.js
+│   └── package.json
+│
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── HeaderStatus.jsx
+│   │   │   ├── TargetInput.jsx
+│   │   │   ├── SystemLog.jsx
+│   │   │   ├── KeyDerivation.jsx
+│   │   │   ├── Mempool.jsx
+│   │   │   ├── BlockScanner.jsx
+│   │   │   ├── BalanceChecker.jsx
+│   │   │   ├── ExportModal.jsx
+│   │   │   └── LoadingSpinner.jsx
+│   │   ├── context/
+│   │   │   ├── LogContext.jsx
+│   │   │   ├── ScanContext.jsx
+│   │   │   └── UIStateContext.jsx
+│   │   ├── lib/
+│   │   │   ├── api.js
+│   │   │   └── helpers.js
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx
+│   │   │   └── Settings.jsx
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── styles.css
+│   └── package.json
+│
+├── replit.nix
+├── README.md
+└── .env  (BTC_API_KEY, ETH_RPC_URL)
+✅ 2. WHAT EACH MODULE DOES (Detailed)
+SERVER SIDE
+routes/btc.js
+Endpoints:
+
+/btc/address/:addr → fetch blockchain.info rawaddr
+
+/btc/balance/:addr → return balance
+
+/btc/derive/btc → derive synthetic BTC formats
+
+routes/eth.js
+Endpoints:
+
+/eth/balance/:addr
+
+/eth/synthetic → derive synthetic ETH from entropy
+
+routes/mempool.js
+Endpoints:
+
+/mempool/live → return unconfirmed TXs
+
+routes/block.js
+Endpoints:
+
+/block/:height
+
+/block/hash/:hash
+
+routes/synthetic.js
+SAFE implementation:
+
+/synthetic/from-txid
+Converts txid → entropy → synthetic private key → BTC/ETH addresses
+⚠️ NO REAL KEY RECOVERY
+
+CLIENT SIDE
+TargetInput.jsx
+Input BTC Address
+
+Button: Initiate Scan
+
+Sends request to backend → /btc/address/:addr
+
+Updates ScanContext
+
+SystemLog.jsx
+Receives messages from LogContext
+
+Renders with timestamp
+
+Supports filtering
+
+KeyDerivation.jsx
+Core module.
+
+Features:
+
+Table of TXIDs
+
+Button: Generate Synthetic Keys
+
+Button: Check Balances
+
+Table updates with:
+
+TXID
+
+Synthetic ETH Address
+
+Synthetic BTC (Legacy / SegWit / Bech32)
+
+Balance
+
+All synthetic key derivation is done by backend route /synthetic/from-txid.
+
+Mempool.jsx
+Calls backend /mempool/live
+
+Rendering:
+
+Live fee graph
+
+Table of unconfirmed TXIDs
+
+BlockScanner.jsx
+Input: block height or hash
+
+Buttons trigger:
+
+/block/:height
+
+/block/hash/:hash
+
+Results:
+
+Block metadata
+
+TX table
+
+Button → "Send to Key Derivation"
+
+BalanceChecker.jsx
+Input ETH or BTC addresses
+
+Calls:
+
+/btc/balance/:addr
+
+/eth/balance/:addr
+
+✅ 3. FULL DATA FLOW (Critical for Replit Agent)
+pgsql
+Kodu kopyala
+[User enters BTC address]
+        ↓
+Frontend → /btc/address/<addr>
+        ↓
+Backend fetches rawaddr JSON
+        ↓
+TXIDs returned → Frontend
+        ↓
+User selects "Generate Synthetic Keys"
+        ↓
+Frontend → /synthetic/from-txid
+        ↓
+Backend converts txid → entropy → fake private key → BTC/ETH addresses
+        ↓
+Frontend renders derived identities table
+        ↓
+User presses “Check Balances”
+        ↓
+Frontend → /btc/balance + /eth/balance
+        ↓
+Display in table
+✅ 4. SYNTHETIC KEY GENERATION (Safe Logic)
+Backend file: services/syntheticKeygen.js
+
+Algorithm (safe educational):
+Read txid hex.
+
+Convert hex → big integer.
+
+Reduce mod secp256k1_n.
+
+If 0, set to 1.
+
+Use this synthetic key ONLY for demo addresses.
+
+Derive:
+
+BTC Legacy
+
+BTC P2SH-P2WPKH
+
+BTC Bech32
+
+ETH checksum address
+
+⚠️ No signing, no spending, no wallet creation.
+⚠️ No attempt to use keys belonging to real people.
+
+✅ 5. BACKEND ROUTES — Replit Agent Implementation Instructions
+Here is what you MUST instruct the Replit agent to build.
+
+You will tell Replit Agent:
+
+🔧 Create server/index.js
+Use:
+
+js
+Kodu kopyala
+import express from "express";
+import cors from "cors";
+import btcRoutes from "./routes/btc.js";
+import ethRoutes from "./routes/eth.js";
+import mempoolRoutes from "./routes/mempool.js";
+import blockRoutes from "./routes/block.js";
+import syntheticRoutes from "./routes/synthetic.js";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.use("/btc", btcRoutes);
+app.use("/eth", ethRoutes);
+app.use("/mempool", mempoolRoutes);
+app.use("/block", blockRoutes);
+app.use("/synthetic", syntheticRoutes);
+
+app.listen(3000, () => console.log("Server running on port 3000"));
+🔧 Create minimal working versions of:
+bash
+Kodu kopyala
+/routes/btc.js
+/routes/eth.js
+/routes/mempool.js
+/routes/block.js
+/routes/synthetic.js
+Each should respond with JSON and use fetch() for external APIs.
+
+✅ 6. FRONTEND — Replit Agent Instructions
+Create a React project under /client/.
+
+Install:
+
+nginx
+Kodu kopyala
+npm install axios react-router-dom
+Create:
+
+src/lib/api.js
+Contains wrappers:
+
+js
+Kodu kopyala
+export const getAddressData = (addr) =>
+  axios.get(`/btc/address/${addr}`);
+
+export const getSyntheticFromTxid = (txid) =>
+  axios.post(`/synthetic/from-txid`, { txid });
+
+export const getBTCBalance = (addr) =>
+  axios.get(`/btc/balance/${addr}`);
+
+export const getETHBalance = (addr) =>
+  axios.get(`/eth/balance/${addr}`);
+
+export const getMempool = () =>
+  axios.get(`/mempool/live`);
+
+export const getBlock = (h) =>
+  axios.get(`/block/${h}`);
+✅ 7. HOW REPLIT AGENT MUST BUILD THE UI
+You instruct Replit Agent:
+
+"Render the interface exactly like the screenshot, but functional, using Tailwind or custom CSS."
+The agent must:
+
+Create a 3-column layout
+
+Sidebar left
+
+Header top
+
+Feature panel right
+
+And replicate the grid terminal aesthetic.
+
+✅ 8. REPLIT AGENT FINAL INSTRUCTIONS (Copy–Paste This to the Agent)
+You can copy this directly into Replit Agent:
+
+REPLIT AGENT — BUILD INSTRUCTIONS
+markdown
+Kodu kopyala
+You are to generate a complete functional version of the CryptoHunter UI and backend. 
+Follow the directives exactly:
+
+1. Create the project tree shown above.
+2. Build the backend using Node.js and Express with the defined routes:
+   - /btc/address/:addr
+   - /btc/balance/:addr
+   - /eth/balance/:addr
+   - /mempool/live
+   - /block/:height
+   - /synthetic/from-txid
+
+3. Implement synthetic key derivation safely:
+   - txid -> entropy -> fake private key -> BTC formats & ETH address
+   - No real key recovery must ever be implemented.
+
+4. Build frontend using React:
+   - Recreate the UI from the screenshot with a cyber/terminal neon green theme.
+   - Add functional tabs: Key Derivation, Live Mempool, Block Scanner.
+   - Add System Log panel.
+   - The Derived Identities table must update dynamically using backend APIs.
+
+5. Implement Axios wrappers for calling backend APIs.
+
+6. Ensure CORS, JSON body parsing, and correct port binding.
+
+7. Create environment variables for ETH RPC URL and optional BTC API key.
+
+8. The final application must show:
+   - TXIDs from a BTC address
+   - Synthetic BTC/ETH addresses
+   - BTC & ETH balances
+   - Live mempool data
+   - Block scan results
