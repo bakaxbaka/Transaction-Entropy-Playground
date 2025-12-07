@@ -423,13 +423,13 @@ export default function Dashboard() {
                 </div>
 
                 <div className="flex-1 overflow-auto bg-black/20">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse table-fixed">
                     <thead className="text-[10px] uppercase text-muted-foreground sticky top-0 bg-card z-10 shadow-lg">
                       <tr>
-                        <th className="p-3 border-b border-border bg-card">Source TXID</th>
-                        <th className="p-3 border-b border-border bg-card">Synthetic ETH Address</th>
-                        <th className="p-3 border-b border-border bg-card">Synthetic BTC (Bech32)</th>
-                        <th className="p-3 border-b border-border bg-card text-right">Balance</th>
+                        <th className="p-3 border-b border-border bg-card w-[30%]">Source TXID</th>
+                        <th className="p-3 border-b border-border bg-card w-[30%]">Synthetic ETH Address</th>
+                        <th className="p-3 border-b border-border bg-card w-[30%]">Synthetic BTC (Bech32)</th>
+                        <th className="p-3 border-b border-border bg-card text-right w-[10%]">Balance</th>
                       </tr>
                     </thead>
                     <tbody className="text-[11px] font-mono divide-y divide-border/30">
@@ -452,13 +452,13 @@ export default function Dashboard() {
                             className="hover:bg-primary/5 group transition-colors"
                             data-testid={`row-identity-${i}`}
                           >
-                            <td className="p-3 text-muted-foreground font-bold group-hover:text-primary transition-colors cursor-help" title={data.txId}>
-                              {data.txId.substring(0, 12)}...{data.txId.substring(data.txId.length - 8)}
+                            <td className="p-3 text-muted-foreground font-bold group-hover:text-primary transition-colors break-all">
+                              {data.txId}
                             </td>
-                            <td className="p-3 text-foreground/80 font-mono">
+                            <td className="p-3 text-foreground/80 font-mono break-all">
                               {data.ethAddress === "DISABLED" ? <span className="text-muted-foreground opacity-50">DISABLED</span> : data.ethAddress}
                             </td>
-                            <td className="p-3 text-foreground/80 font-mono">
+                            <td className="p-3 text-foreground/80 font-mono break-all">
                               {data.btcAddresses.bech32}
                             </td>
                             <td className="p-3 text-right">
@@ -507,21 +507,21 @@ export default function Dashboard() {
                   <MempoolGraph />
                   
                   <div className="flex-1 overflow-auto border border-border">
-                    <table className="w-full text-left">
+                    <table className="w-full text-left table-fixed">
                       <thead className="bg-card sticky top-0 text-[10px] uppercase text-muted-foreground">
                         <tr>
-                          <th className="p-2 border-b border-border">TXID</th>
-                          <th className="p-2 border-b border-border">Fee (sat/vB)</th>
-                          <th className="p-2 border-b border-border">Value</th>
-                          <th className="p-2 border-b border-border text-right">Size</th>
+                          <th className="p-2 border-b border-border w-[60%]">TXID</th>
+                          <th className="p-2 border-b border-border w-[15%]">Fee (sat/vB)</th>
+                          <th className="p-2 border-b border-border w-[15%]">Value</th>
+                          <th className="p-2 border-b border-border text-right w-[10%]">Size</th>
                         </tr>
                       </thead>
                       <tbody className="text-[11px]">
                         {mempoolData?.txs && mempoolData.txs.length > 0 ? (
                           mempoolData.txs.slice(0, 20).map((tx, i) => (
                             <tr key={tx.txid || i} className="hover:bg-amber-500/5 border-b border-border/30" data-testid={`mempool-tx-${i}`}>
-                              <td className="p-2 text-amber-500/80 font-mono">
-                                {tx.txid ? `${tx.txid.substring(0, 16)}...` : 'N/A'}
+                              <td className="p-2 text-amber-500/80 font-mono break-all">
+                                {tx.txid || 'N/A'}
                               </td>
                               <td className="p-2">{tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : 'N/A'}</td>
                               <td className="p-2">{tx.value ? (tx.value / 100000000).toFixed(4) : '0'} BTC</td>
@@ -571,9 +571,9 @@ export default function Dashboard() {
                       <span className="text-lg font-bold text-foreground">Block #{blockData.height.toLocaleString()}</span>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
-                      <div>
+                      <div className="col-span-2">
                         <span className="text-muted-foreground block">Hash</span>
-                        <span className="text-foreground font-mono">{blockData.id.substring(0, 16)}...</span>
+                        <span className="text-foreground font-mono break-all">{blockData.id}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground block">Transactions</span>
@@ -609,9 +609,9 @@ export default function Dashboard() {
                              <span className="text-lg font-bold text-foreground">#{block.height.toLocaleString()}</span>
                            </div>
                            <div className="space-y-1 text-[10px] text-muted-foreground font-mono">
-                             <div className="flex justify-between">
-                               <span>Hash:</span>
-                               <span className="text-foreground">{block.id.substring(0, 8)}...{block.id.substring(block.id.length - 6)}</span>
+                             <div>
+                               <span className="block mb-1">Hash:</span>
+                               <span className="text-foreground break-all block">{block.id}</span>
                              </div>
                              <div className="flex justify-between">
                                <span>TXs:</span>
