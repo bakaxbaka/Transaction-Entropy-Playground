@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #000;
+            color: #0f0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            background: #0f0;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #output {
+            white-space: pre-wrap;
+            border: 1px solid #0f0;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>CryptoHunter API Test</h1>
+    <button onclick="testFullFlow()">Test Full Flow</button>
+    <button onclick="clearOutput()">Clear</button>
+    <div id="output"></div>
+
+    <script>
+        function log(msg) {
+            const output = document.getElementById('output');
+            output.textContent += msg + '\n';
+            console.log(msg);
+        }
+
+        function clearOutput() {
+            document.getElementById('output').textContent = '';
+        }
+
+        async function testFullFlow() {
+            clearOutput();
+            log('=== Starting Full Flow Test ===\n');
+            
+            try {
+                // Step 1: Fetch address transactions
+                log('Step 1: Fetching address transactions...');
+                const addrResponse = await fetch('/api/btc/address/1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa?limit=5');
+                const addrData = await response.json();
+                log(`✓ Got ${addrData.txs.length} transactions`);
+                log(`  Balance: ${addrData.balance} BTC`);
+                log(`  Scan ID: ${addrData.scanId}\n`);
+
+                // Step 2: Derive batch synthetic
+                log('Step 2: Deriving synthetic identities...');
+                const txids = addrData.txs.map(tx => tx.hash);
+                log(`  TXIDs: ${txids.join(', ').substring(0, 100)}...`);
+                
+                const batchResponse = await fetch('/api/synthetic/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ txids, scanId: addrData.scanId })
+                });
+                const batchData = await batchResponse.json();
+                log(`✓ Derived ${batchData.count} identities\n`);
+
+                // Step 3: Display results
+                log('Step 3: Results:');
+                batchData.identities.forEach((identity, i) => {
+                    log(`\n[${i + 1}] TXID: ${identity.sourceTxId.substring(0, 16)}...`);
+                    log(`    ETH: ${identity.ethAddress}`);
+                    log(`    BTC: ${identity.btcBech32}`);
+                });
+
+                log('\n=== Test Completed Successfully! ===');
+            } catch (error) {
+                log(`\n❌ ERROR: ${error.message}`);
+                log(`Stack: ${error.stack}`);
+            }
+        }
+    </script>
+</body>
+</html>

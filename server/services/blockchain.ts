@@ -1,204 +1,173 @@
-export interface BlockchainTx {
-  hash: string;
-  time: number;
-  result: number;
-  fee: number;
-  size: number;
-  inputs: { prev_out: { addr: string; value: number } }[];
-  out: { addr: string; value: number; spent: boolean }[];
-}
+import { AddressData, BlockData, MempoolTx } from "../client/src/lib/api";
 
-export interface AddressData {
-  address: string;
-  finalBalance: number;
-  totalReceived: number;
-  totalSent: number;
-  txCount: number;
-  txs: BlockchainTx[];
-}
+const BLOCKSTREAM_API = "https://blockstream.info/api";
 
-export interface MempoolTx {
-  txid: string;
-  fee: number;
-  vsize: number;
-  value: number;
-  firstSeen: number;
-  feeRate: number;
-}
-
-export interface BlockData {
-  height: number;
-  hash: string;
-  time: number;
-  txCount: number;
-  size: number;
-  weight: number;
-  fee: number;
-  miner: string;
-  txs: { hash: string; fee: number; size: number; value: number }[];
-}
+// --- BTC Address Data ---
 
 export async function fetchAddressData(address: string, limit = 50): Promise<AddressData> {
-  const url = `https://blockchain.info/rawaddr/${address}?limit=${limit}`;
-  
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-    }
-  });
-  
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error('API_RATE_LIMIT');
-    }
-    throw new Error(`Blockchain API error: ${response.status}`);
+  // Blockstream API does not support transaction limit directly on address endpoint.
+  // We fetch the address info and then the latest transactions.
+  const addressUrl = `${BLOCKSTREAM_API}/address/${address}`;
+  const txsUrl = `${BLOCKSTREAM_API}/address/${address}/txs`;
+
+  const addressResponse = await fetch(addressUrl);
+  if (!addressResponse.ok) {
+    throw new Error(`Blockstream Address API error: ${addressResponse.status}`);
   }
-  
-  const data = await response.json();
-  
+  const addressData = await addressResponse.json();
+
+  const txsResponse = await fetch(txsUrl);
+  if (!txsResponse.ok) {
+    throw new Error(`Blockstream Txs API error: ${txsResponse.status}`);
+  }
+  const txsData = await txsResponse.json();
+
+  // Map Blockstream data to the expected AddressData interface
+  const txs = txsData.slice(0, limit).map((tx: any) => ({
+    hash: tx.txid,
+    time: tx.status.block_time,
+    result: tx.vout.reduce((sum: number, output: any) => sum + output.value, 0), // Simplified result for now
+    fee: tx.fee,
+    size: tx.size,
+    inputs: tx.vin.map((input: any) => ({ prev_out: { addr: input.prevout.scriptpubkey_address, value: input.prevout.value } })),
+    out: tx.vout.map((output: any) => ({ addr: output.scriptpubkey_address, value: output.value, spent: output.status.spent }))
+  }));
+
   return {
-    address: data.address,
-    finalBalance: data.final_balance || 0,
-    totalReceived: data.total_received || 0,
-    totalSent: data.total_sent || 0,
-    txCount: data.n_tx || 0,
-    txs: (data.txs || []).map((tx: any) => ({
-      hash: tx.hash,
-      time: tx.time,
-      result: tx.result,
-      fee: tx.fee || 0,
-      size: tx.size || 0,
-      inputs: tx.inputs || [],
-      out: tx.out || []
-    }))
+    address: address,
+    finalBalance: addressData.chain_stats.funded_txo_sum - addressData.chain_stats.spent_txo_sum,
+    totalReceived: addressData.chain_stats.funded_txo_sum,
+    totalSent: addressData.chain_stats.spent_txo_sum,
+    txCount: addressData.chain_stats.tx_count,
+    txs: txs
   };
 }
 
+// --- BTC Balance ---
+
 export async function fetchBtcBalance(address: string): Promise<{ balance: number; confirmed: number; unconfirmed: number }> {
-  const url = `https://blockchain.info/balance?active=${address}`;
-  
+  const url = `${BLOCKSTREAM_API}/address/${address}`;
   const response = await fetch(url);
-  
+
   if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error('API_RATE_LIMIT');
-    }
-    throw new Error(`Balance API error: ${response.status}`);
+    throw new Error(`Blockstream Balance API error: ${response.status}`);
   }
-  
+
   const data = await response.json();
-  const addressData = data[address] || { final_balance: 0 };
-  
+  const balance = (data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum) / 100000000;
+  const confirmed = (data.chain_stats.funded_txo_sum - data.chain_stats.spent_txo_sum) / 100000000;
+  const unconfirmed = (data.mempool_stats.funded_txo_sum - data.mempool_stats.spent_txo_sum) / 100000000;
+
   return {
-    balance: addressData.final_balance / 100000000,
-    confirmed: addressData.final_balance / 100000000,
-    unconfirmed: 0
+    balance: balance,
+    confirmed: confirmed,
+    unconfirmed: unconfirmed
   };
 }
+
+// --- ETH Balance (Using Etherscan as before) ---
 
 export async function fetchEthBalance(address: string): Promise<{ balance: number }> {
   const url = `https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest`;
   
-  try {
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      return { balance: 0 };
-    }
-    
-    const data = await response.json();
-    
-    if (data.status === '1' && data.result) {
-      const balanceWei = BigInt(data.result);
-      const balanceEth = Number(balanceWei) / 1e18;
-      return { balance: balanceEth };
-    }
-    
-    return { balance: 0 };
-  } catch {
-    return { balance: 0 };
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`Etherscan Balance API error: ${response.status}`);
   }
+  
+  const data = await response.json();
+  
+  if (data.status !== "1") {
+    throw new Error(`Etherscan API error: ${data.message}`);
+  }
+
+  // Balance is returned in Wei, convert to Ether
+  const balanceInWei = BigInt(data.result);
+  const balanceInEth = Number(balanceInWei) / 1e18;
+
+  return {
+    balance: balanceInEth
+  };
 }
 
-export async function fetchMempool(): Promise<{ size: number; txs: MempoolTx[]; feeRates: { low: number; medium: number; high: number } }> {
-  try {
-    const [mempoolRes, feesRes] = await Promise.all([
-      fetch('https://mempool.space/api/mempool'),
-      fetch('https://mempool.space/api/v1/fees/recommended')
-    ]);
-    
-    const mempoolData = await mempoolRes.json();
-    const feesData = await feesRes.json();
-    
-    const recentTxsRes = await fetch('https://mempool.space/api/mempool/recent');
-    const recentTxs = await recentTxsRes.json();
-    
-    return {
-      size: mempoolData.vsize || 0,
-      feeRates: {
-        low: feesData.hourFee || 5,
-        medium: feesData.halfHourFee || 10,
-        high: feesData.fastestFee || 20
-      },
-      txs: (recentTxs || []).slice(0, 50).map((tx: any) => ({
-        txid: tx.txid,
-        fee: tx.fee || 0,
-        vsize: tx.vsize || tx.size || 0,
-        value: tx.value || 0,
-        firstSeen: Date.now() / 1000,
-        feeRate: tx.fee && tx.vsize ? (tx.fee / tx.vsize).toFixed(1) : 0
-      }))
-    };
-  } catch (error) {
-    console.error('Mempool fetch error:', error);
-    return {
-      size: 0,
-      feeRates: { low: 5, medium: 10, high: 20 },
-      txs: []
-    };
+// --- Mempool Data ---
+
+export async function fetchMempool(): Promise<{ txs: MempoolTx[]; feeRates: { low: number; medium: number; high: number } }> {
+  const url = `${BLOCKSTREAM_API}/mempool`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Blockstream Mempool API error: ${response.status}`);
   }
+
+  const data = await response.json();
+
+  // Blockstream mempool endpoint returns general stats, not a list of txs.
+  // We'll use the fee-estimates endpoint for fee rates and mock the txs list.
+  const feeUrl = `${BLOCKSTREAM_API}/fee-estimates`;
+  const feeResponse = await fetch(feeUrl);
+  const feeData = await feeResponse.json();
+
+  const feeRates = {
+    low: feeData["144"] || 1, // 24 hours
+    medium: feeData["30"] || 5, // 5 hours
+    high: feeData["2"] || 10, // 2 blocks
+  };
+
+  // Mocking txs list as Blockstream mempool endpoint doesn't provide it easily
+  const txs: MempoolTx[] = [];
+
+  return {
+    txs: txs,
+    feeRates: feeRates
+  };
 }
 
-export async function fetchBlock(heightOrHash: string): Promise<BlockData | null> {
-  try {
-    let hash = heightOrHash;
-    
-    if (heightOrHash === 'tip' || heightOrHash === 'latest') {
-      const tipRes = await fetch('https://mempool.space/api/blocks/tip/hash');
-      if (!tipRes.ok) return null;
-      hash = await tipRes.text();
-    } else if (/^\d+$/.test(heightOrHash)) {
-      const hashRes = await fetch(`https://mempool.space/api/block-height/${heightOrHash}`);
-      if (!hashRes.ok) return null;
-      hash = await hashRes.text();
+// --- Block Data ---
+
+export async function fetchBlock(heightOrHash: string): Promise<BlockData> {
+  let hash: string;
+
+  if (isNaN(Number(heightOrHash))) {
+    hash = heightOrHash;
+  } else {
+    const hashUrl = `${BLOCKSTREAM_API}/block-height/${heightOrHash}`;
+    const hashResponse = await fetch(hashUrl);
+    if (!hashResponse.ok) {
+      throw new Error(`Blockstream Block Hash API error: ${hashResponse.status}`);
     }
-    
-    const blockRes = await fetch(`https://mempool.space/api/block/${hash}`);
-    if (!blockRes.ok) return null;
-    
-    const block = await blockRes.json();
-    
-    const txsRes = await fetch(`https://mempool.space/api/block/${hash}/txs/0`);
-    const txs = txsRes.ok ? await txsRes.json() : [];
-    
-    return {
-      height: block.height,
-      hash: block.id,
-      time: block.timestamp,
-      txCount: block.tx_count,
-      size: block.size,
-      weight: block.weight,
-      fee: block.extras?.totalFees || 0,
-      miner: block.extras?.pool?.name || 'Unknown',
-      txs: txs.slice(0, 25).map((tx: any) => ({
-        hash: tx.txid,
-        fee: tx.fee || 0,
-        size: tx.size || tx.vsize || 0,
-        value: tx.vout?.reduce((sum: number, out: any) => sum + (out.value || 0), 0) || 0
-      }))
-    };
-  } catch (error) {
-    console.error('Block fetch error:', error);
-    return null;
+    hash = await hashResponse.text();
   }
+
+  const blockUrl = `${BLOCKSTREAM_API}/block/${hash}`;
+  const blockResponse = await fetch(blockUrl);
+  if (!blockResponse.ok) {
+    throw new Error(`Blockstream Block API error: ${blockResponse.status}`);
+  }
+  const blockData = await blockResponse.json();
+
+  const txsUrl = `${BLOCKSTREAM_API}/block/${hash}/txs`;
+  const txsResponse = await fetch(txsUrl);
+  if (!txsResponse.ok) {
+    throw new Error(`Blockstream Block Txs API error: ${txsResponse.status}`);
+  }
+  const txsData = await txsResponse.json();
+
+  return {
+    height: blockData.height,
+    hash: blockData.id,
+    time: blockData.timestamp,
+    txCount: blockData.tx_count,
+    size: blockData.size,
+    weight: blockData.weight,
+    fee: txsData.reduce((sum: number, tx: any) => sum + tx.fee, 0),
+    miner: "Unknown", // Blockstream API does not provide miner info easily
+    txs: txsData.map((tx: any) => ({
+      hash: tx.txid,
+      fee: tx.fee,
+      size: tx.size,
+      value: tx.vout.reduce((sum: number, output: any) => sum + output.value, 0)
+    }))
+  };
 }
