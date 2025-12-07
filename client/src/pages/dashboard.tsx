@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { 
-  Search, Key, Shield, HardDrive, Download, 
-  RefreshCw, Activity, Layers, Play, Settings, 
-  Cpu, Signal, Radio
+import {
+  Search, Key, Shield, HardDrive, Download,
+  RefreshCw, Activity, Layers, Play, Settings,
+  Cpu, Signal, Radio, AlertTriangle
 } from "lucide-react";
-import { 
+import {
   fetchAddressTransactions,
   deriveBatchSynthetic,
   fetchBtcBalance,
@@ -13,6 +13,7 @@ import {
   fetchMempoolLive,
   fetchBlock,
   syntheticToDerivedIdentity,
+  deriveFromTxId, // Import this function
   type DerivedIdentity,
   type MempoolData,
   type BlockData
@@ -35,21 +36,28 @@ export default function Dashboard() {
   const [deriveOptions, setDeriveOptions] = useState({
     useTxEntropy: true,
     deriveLegacy: true,
-    deriveSegwit: true,
+    deriveSegwit: true, // Keep these, but they are not directly used in the provided changes
     deriveBech32: true,
-    deriveEth: true
+    deriveEth: true,
+    deriveBtc: true // Added for mempool derivation
   });
-  
+
+  const [mempoolMonitoring, setMempoolMonitoring] = useState(false); // Added for mempool monitoring
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
-  const [mempoolLoading, setMempoolLoading] = useState(false);
-  
   const [blockQuery, setBlockQuery] = useState("");
   const [blockData, setBlockData] = useState<BlockData | null>(null);
   const [recentBlocks, setRecentBlocks] = useState<BlockData[]>([]);
   const [blockLoading, setBlockLoading] = useState(false);
-  
-  const [nodeStatus, setNodeStatus] = useState({ height: 0, online: true });
-  
+
+  const [nodeStatus, setNodeStatus] = useState({ height: 0, online: false });
+
+  // System Configuration State
+  const [systemConfig, setSystemConfig] = useState({
+    realCrypto: true,
+    liveApi: true,
+    dbPersistence: true
+  });
+
   const { toast } = useToast();
 
   const addLog = useCallback((msg: string, type: LogEntry['type'] = 'info') => {
@@ -65,7 +73,7 @@ export default function Dashboard() {
   useEffect(() => {
     addLog("System initialized. CryptoHunter v2.0 ready.", "success");
     addLog("Backend connected - Real crypto derivation active.", "api");
-    
+
     fetchBlock("tip").then(block => {
       if (block && block.height) {
         setNodeStatus({ height: block.height, online: true });
@@ -83,16 +91,16 @@ export default function Dashboard() {
       const result = await fetchAddressTransactions(address, scanDepth);
       addLog(`Fetched ${result.txs.length} transactions from blockchain.info API.`, "success");
       addLog(`Address balance: ${result.balance.toFixed(8)} BTC`, "api");
-      
+
       addLog("Starting synthetic key derivation protocol...", "keygen");
       const txids = result.txs.map(tx => tx.hash);
-      
+
       const { identities, count } = await deriveBatchSynthetic(txids, result.scanId);
-      
+
       const derived = identities.map(id => syntheticToDerivedIdentity(id));
       setDerivedData(derived);
       addLog(`Derived ${count} synthetic identities using real secp256k1 math.`, "success");
-      
+
     } catch (error: any) {
       const errorMsg = error.message || "Unknown error";
       addLog(`ERROR: ${errorMsg}`, "error");
@@ -113,7 +121,7 @@ export default function Dashboard() {
       balance: { ...item.balance }
     }));
     let checkedCount = 0;
-    
+
     for (let i = 0; i < updated.length; i++) {
       try {
         if (deriveOptions.deriveEth && updated[i].ethAddress && updated[i].ethAddress !== "DISABLED") {
@@ -123,7 +131,7 @@ export default function Dashboard() {
           }
           updated[i].balance.eth = ethResult.balance;
         }
-        
+
         if (deriveOptions.deriveLegacy && updated[i].btcAddresses.legacy) {
           const btcResult = await fetchBtcBalance(updated[i].btcAddresses.legacy);
           if (btcResult.balance > 0) {
@@ -131,15 +139,15 @@ export default function Dashboard() {
           }
           updated[i].balance.btc = btcResult.balance;
         }
-        
+
         checkedCount++;
       } catch (error) {
         addLog(`Warning: Failed to check balance for identity ${i + 1}`, "error");
       }
-      
+
       await new Promise(r => setTimeout(r, 100));
     }
-    
+
     setDerivedData([...updated]);
     addLog(`Balance scan complete. Checked ${checkedCount} identities.`, "success");
   };
@@ -183,7 +191,7 @@ export default function Dashboard() {
     try {
       const tipBlock = await fetchBlock("tip");
       const blocks: BlockData[] = [tipBlock];
-      
+
       for (let i = 1; i < 6; i++) {
         const block = await fetchBlock(String(tipBlock.height - i));
         blocks.push(block);
@@ -212,7 +220,7 @@ export default function Dashboard() {
       content = derivedData.map(d => `${d.ethAddress},${d.privateKey}`).join('\n');
       filename = `eth_${address}.txt`;
     } else if (type === 'btc') {
-      content = derivedData.map(d => 
+      content = derivedData.map(d =>
         `TxID: ${d.txId}\nWIF: ${d.wif}\nLegacy: ${d.btcAddresses.legacy}\nSegwit: ${d.btcAddresses.segwit}\nBech32: ${d.btcAddresses.bech32}\n---\n`
       ).join('\n');
       filename = `btc_${address}.txt`;
@@ -238,6 +246,122 @@ export default function Dashboard() {
     return `${Math.floor(seconds / 3600)}h ago`;
   };
 
+  // System Configuration Handlers
+  const handleConfigChange = (key: keyof typeof systemConfig, value: boolean) => {
+    setSystemConfig(prev => ({ ...prev, [key]: value }));
+    addLog(`${key.replace(/([A-Z])/g, ' $1').trim()} ${value ? 'ENABLED' : 'DISABLED'}`, 'info');
+  };
+
+  // Updated deriveIdentities to respect system config
+  const deriveIdentities = async () => {
+    if (!address || loading) return; // Use 'address' and 'loading' from component state
+
+    if (!systemConfig.realCrypto) {
+      addLog("WARNING: Real crypto derivation is disabled - using mock mode", "warning");
+    }
+    if (!systemConfig.liveApi) {
+      addLog("ERROR: Live API connections required for scanning", "error");
+      return;
+    }
+
+    setLoading(true); // Use 'setLoading' from component state
+    setDerivedData([]);
+    addLog(`Starting derivation scan on address: ${address}`, "info"); // Use 'address'
+    addLog(`Scan depth: ${scanDepth} transactions`, "info");
+  };
+
+  // Updated mempool monitoring to respect system config
+  const toggleMempoolMonitoring = () => {
+    if (!systemConfig.liveApi && !mempoolMonitoring) {
+      addLog("ERROR: Live API connections required for mempool monitoring", "error");
+      return;
+    }
+
+    setMempoolMonitoring(!mempoolMonitoring);
+    if (!mempoolMonitoring) {
+      addLog("Mempool monitoring ACTIVATED", "success");
+    } else {
+      addLog("Mempool monitoring STOPPED", "info");
+    }
+  };
+
+  useEffect(() => {
+    if (!mempoolMonitoring) return;
+
+    const interval = setInterval(async () => {
+      if (!systemConfig.liveApi) { // Stop interval if live API is disabled
+        setMempoolMonitoring(false);
+        addLog("Mempool monitoring stopped: Live API connections disabled", "warning");
+        return;
+      }
+      const data = await fetchMempoolLive();
+      if (data) {
+        setMempoolData(data);
+        if (data.txs && data.txs.length > 0) {
+          addLog(`Mempool update: ${data.count} transactions, Latest: ${data.txs[0].txid.substring(0, 16)}...`, "api");
+
+          // Auto-derive and check balances for new mempool transactions
+          for (const tx of data.txs.slice(0, 3)) { // Process first 3 transactions
+            try {
+              addLog(`Deriving synthetic identity from mempool tx: ${tx.txid.substring(0, 16)}...`, "keygen");
+
+              const result = await deriveFromTxId(tx.txid, {
+                deriveEth: deriveOptions.deriveEth,
+                deriveBtc: deriveOptions.deriveBtc // Use deriveBtc from options
+              });
+
+              if (result) {
+                const newIdentity: DerivedIdentity = {
+                  id: Date.now() + Math.random(),
+                  txId: tx.txid,
+                  wif: result.wif,
+                  ethAddress: result.ethAddress || "DISABLED",
+                  btcAddresses: { // Ensure btcAddresses structure matches DerivedIdentity
+                    legacy: result.btcLegacy || "DISABLED",
+                    segwit: result.btcSegwit || "DISABLED",
+                    bech32: result.btcBech32 || "DISABLED",
+                  },
+                  balance: { btc: "0", eth: "0" }
+                };
+
+                // Check balances immediately if Live API is enabled
+                if (systemConfig.liveApi) {
+                  if (deriveOptions.deriveEth && result.ethAddress) {
+                    const ethResult = await fetchEthBalance(result.ethAddress);
+                    if (ethResult.balance > 0) {
+                      addLog(`🎯 MEMPOOL HIT! Found ${ethResult.balance} ETH at ${result.ethAddress}`, "success");
+                      newIdentity.balance.eth = ethResult.balance.toString();
+                    }
+                  }
+
+                  if (deriveOptions.deriveBtc && result.btcBech32) {
+                    const btcResult = await fetchBtcBalance(result.btcBech32);
+                    if (btcResult.balance > 0) {
+                      addLog(`🎯 MEMPOOL HIT! Found ${btcResult.balance} BTC at ${result.btcBech32}`, "success");
+                      newIdentity.balance.btc = btcResult.balance.toString();
+                    }
+                  }
+                }
+
+                // Add to derived data
+                setDerivedData(prev => [newIdentity, ...prev]);
+                addLog(`Added mempool-derived identity to table`, "success");
+              }
+            } catch (error) {
+              addLog(`Failed to derive from mempool tx: ${tx.txid.substring(0, 16)}`, "error");
+            }
+
+            // Small delay between processing transactions
+            await new Promise(r => setTimeout(r, 200));
+          }
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [mempoolMonitoring, addLog, deriveOptions, systemConfig.liveApi, deriveFromTxId, fetchMempoolLive, setDerivedData, fetchEthBalance, fetchBtcBalance]);
+
+
   return (
     <div className="min-h-screen font-mono text-sm relative overflow-hidden flex flex-col" data-testid="dashboard">
       <MatrixBackground />
@@ -261,7 +385,7 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex gap-4 text-[10px] font-bold">
              <div className="flex flex-col items-end">
                 <div className={cn("flex items-center gap-1", nodeStatus.online ? "text-green-500" : "text-red-500")}>
@@ -273,7 +397,7 @@ export default function Dashboard() {
              <div className="flex flex-col items-end">
                 <div className="flex items-center gap-1 text-amber-500">
                   <Activity className="w-3 h-3" />
-                  <span>MEMPOOL: {mempoolData ? `${mempoolData.count} TXS` : "ACTIVE"}</span>
+                  <span>MEMPOOL: {mempoolData ? `${mempoolData.count} TXS` : "IDLE"}</span>
                 </div>
                 <span className="text-muted-foreground">API: LIVE</span>
              </div>
@@ -282,15 +406,15 @@ export default function Dashboard() {
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 p-6 relative z-10 overflow-hidden">
-        
+
         <div className="lg:col-span-1 flex flex-col gap-6 h-full overflow-hidden">
           <TerminalModule title="Target Module" icon={<Search className="w-4 h-4" />} glow>
             <div className="p-4 space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-muted-foreground font-bold">Bitcoin Address</label>
                 <div className="relative">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     className="w-full bg-input border border-border p-2 text-xs focus:border-primary outline-none text-primary font-bold tracking-wider"
@@ -306,8 +430,8 @@ export default function Dashboard() {
 
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-muted-foreground font-bold">Scan Depth</label>
-                <select 
-                  value={scanDepth} 
+                <select
+                  value={scanDepth}
                   onChange={(e) => setScanDepth(Number(e.target.value))}
                   className="w-full bg-card border border-border p-2 text-xs text-foreground outline-none"
                   data-testid="select-depth"
@@ -320,8 +444,8 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2">
-                 <button 
-                  onClick={handleFetch}
+                 <button
+                  onClick={deriveIdentities} // Changed to call deriveIdentities
                   disabled={loading}
                   className="col-span-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary p-3 flex items-center justify-center gap-2 uppercase font-bold transition-all relative overflow-hidden group"
                   data-testid="button-scan"
@@ -344,20 +468,20 @@ export default function Dashboard() {
         </div>
 
         <div className="lg:col-span-3 flex flex-col h-full overflow-hidden gap-4">
-          
+
           <div className="flex border-b border-border bg-background/50 backdrop-blur-sm">
             {[
               { id: 'scan', label: 'Key Derivation', icon: Key },
               { id: 'mempool', label: 'Live Mempool', icon: Activity },
               { id: 'blocks', label: 'Block Scanner', icon: Layers },
             ].map((tab) => (
-              <button 
+              <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
                   "px-6 py-3 text-xs uppercase font-bold flex items-center gap-2 transition-all relative",
-                  activeTab === tab.id 
-                    ? "text-primary bg-primary/5 border-b-2 border-primary" 
+                  activeTab === tab.id
+                    ? "text-primary bg-primary/5 border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 )}
                 data-testid={`tab-${tab.id}`}
@@ -367,7 +491,7 @@ export default function Dashboard() {
                 {tab.id === 'mempool' && mempoolData && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse ml-1" />}
               </button>
             ))}
-            
+
             <div className="ml-auto flex items-center pr-4">
               <Dialog>
                 <DialogTrigger asChild>
@@ -380,18 +504,57 @@ export default function Dashboard() {
                     <DialogTitle className="text-primary uppercase">System Configuration</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
-                    <div className="flex items-center justify-between p-2 border border-border">
-                       <span>Real Crypto Derivation</span>
-                       <div className="w-4 h-4 border border-primary bg-primary/50" />
+                    <div className="flex items-center justify-between p-2 border border-border hover:bg-primary/10 transition-colors">
+                       <div className="flex flex-col gap-1">
+                         <span className="font-bold">Real Crypto Derivation</span>
+                         <span className="text-[10px] text-muted-foreground">
+                           {systemConfig.realCrypto ? 'Using actual cryptographic libraries' : 'Mock mode (faster, for testing)'}
+                         </span>
+                       </div>
+                       <button
+                         onClick={() => handleConfigChange('realCrypto', !systemConfig.realCrypto)}
+                         className={cn(
+                           "w-4 h-4 border border-primary transition-all",
+                           systemConfig.realCrypto ? "bg-primary/50" : "bg-transparent"
+                         )}
+                       />
                     </div>
-                    <div className="flex items-center justify-between p-2 border border-border">
-                       <span>Live API Connections</span>
-                       <div className="w-4 h-4 border border-primary bg-primary/50" />
+                    <div className="flex items-center justify-between p-2 border border-border hover:bg-primary/10 transition-colors">
+                       <div className="flex flex-col gap-1">
+                         <span className="font-bold">Live API Connections</span>
+                         <span className="text-[10px] text-muted-foreground">
+                           {systemConfig.liveApi ? 'Connected to blockchain APIs' : 'Offline mode'}
+                         </span>
+                       </div>
+                       <button
+                         onClick={() => handleConfigChange('liveApi', !systemConfig.liveApi)}
+                         className={cn(
+                           "w-4 h-4 border border-primary transition-all",
+                           systemConfig.liveApi ? "bg-primary/50" : "bg-transparent"
+                         )}
+                       />
                     </div>
-                    <div className="flex items-center justify-between p-2 border border-border">
-                       <span>Database Persistence</span>
-                       <div className="w-4 h-4 border border-primary bg-primary/50" />
+                    <div className="flex items-center justify-between p-2 border border-border hover:bg-primary/10 transition-colors">
+                       <div className="flex flex-col gap-1">
+                         <span className="font-bold">Database Persistence</span>
+                         <span className="text-[10px] text-muted-foreground">
+                           {systemConfig.dbPersistence ? 'Saving results to database' : 'Memory only (not saved)'}
+                         </span>
+                       </div>
+                       <button
+                         onClick={() => handleConfigChange('dbPersistence', !systemConfig.dbPersistence)}
+                         className={cn(
+                           "w-4 h-4 border border-primary transition-all",
+                           systemConfig.dbPersistence ? "bg-primary/50" : "bg-transparent"
+                         )}
+                       />
                     </div>
+                  </div>
+                  <div className="border-t border-border pt-4 mt-4">
+                    <p className="text-[10px] text-amber-500 flex items-center gap-2">
+                      <AlertTriangle className="w-3 h-3" />
+                      Changes take effect immediately
+                    </p>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -411,8 +574,12 @@ export default function Dashboard() {
                       <input type="checkbox" checked={deriveOptions.deriveEth} onChange={e => setDeriveOptions({...deriveOptions, deriveEth: e.target.checked})} className="accent-primary" />
                       <span className="text-muted-foreground hover:text-foreground">Derive ETH</span>
                     </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={deriveOptions.deriveBtc} onChange={e => setDeriveOptions({...deriveOptions, deriveBtc: e.target.checked})} className="accent-primary" />
+                      <span className="text-muted-foreground hover:text-foreground">Derive BTC</span>
+                    </label>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <button onClick={checkBalances} disabled={derivedData.length === 0} className="px-3 py-1.5 text-xs bg-primary/10 hover:bg-primary/20 border border-primary/50 text-primary font-bold flex items-center gap-2 disabled:opacity-50" data-testid="button-check-balances">
                       <Play className="w-3 h-3" /> CHECK BALANCES
@@ -448,7 +615,7 @@ export default function Dashboard() {
                         </tr>
                       ) : (
                         derivedData.map((data, i) => (
-                          <motion.tr 
+                          <motion.tr
                             key={data.txId}
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -478,7 +645,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
-                
+
                 {derivedData.length > 0 && (
                   <div className="p-2 border-t border-border bg-secondary/10 text-[10px] text-muted-foreground flex justify-between">
                     <span>Total: {derivedData.length} synthetic identities derived</span>
@@ -501,15 +668,15 @@ export default function Dashboard() {
                       <span>|</span>
                       <span>Fees: {mempoolData?.feeRates.low || 0}-{mempoolData?.feeRates.high || 0} sat/vB</span>
                     </div>
-                    <button onClick={loadMempool} disabled={mempoolLoading} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1" data-testid="button-refresh-mempool">
-                      <RefreshCw className={cn("w-3 h-3", mempoolLoading && "animate-spin")} /> Refresh
+                    <button onClick={toggleMempoolMonitoring} disabled={!systemConfig.liveApi && !mempoolMonitoring} className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 disabled:opacity-50" data-testid="button-mempool-toggle">
+                      <RefreshCw className={cn("w-3 h-3", mempoolLoading && "animate-spin")} /> {mempoolMonitoring ? "Stop" : "Start"}
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="p-4 flex-1 flex flex-col gap-4 overflow-hidden">
                   <MempoolGraph />
-                  
+
                   <div className="flex-1 overflow-auto border border-border">
                     <table className="w-full text-left table-fixed">
                       <thead className="bg-card sticky top-0 text-[10px] uppercase text-muted-foreground">
@@ -545,19 +712,19 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-            
+
             {activeTab === 'blocks' && (
               <div className="h-full flex flex-col bg-black/20">
                 <div className="p-4 border-b border-border flex gap-4">
-                  <input 
-                    type="text" 
-                    placeholder="Block Height / Hash" 
+                  <input
+                    type="text"
+                    placeholder="Block Height / Hash"
                     value={blockQuery}
                     onChange={(e) => setBlockQuery(e.target.value)}
-                    className="bg-input border border-border p-2 text-xs w-64 focus:border-blue-500 outline-none" 
+                    className="bg-input border border-border p-2 text-xs w-64 focus:border-blue-500 outline-none"
                     data-testid="input-block-query"
                   />
-                  <button 
+                  <button
                     onClick={loadBlock}
                     disabled={blockLoading}
                     className="bg-blue-500/10 text-blue-500 border border-blue-500/50 px-4 py-2 text-xs font-bold uppercase hover:bg-blue-500/20 disabled:opacity-50 flex items-center gap-2"
