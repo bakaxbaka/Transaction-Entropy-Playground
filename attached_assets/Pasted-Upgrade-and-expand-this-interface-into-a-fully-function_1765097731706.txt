@@ -1,0 +1,247 @@
+Upgrade and expand this interface into a fully functional crypto-analysis dashboard.
+Keep the same dark-grid cyber-forensic / neon-green terminal UI theme shown in the reference image.
+Preserve the layout logic, but make it more refined, modern, and feature-complete.
+
+🧱 1. Global Styling Rules
+
+Keep the retro-terminal aesthetic: black background, subtle grid lines, neon green UI elements.
+
+Add optional secondary accents (cyan or amber) where needed for hierarchy.
+
+Use a monospaced font for inputs, logs, txids, addresses (e.g., JetBrains Mono, IBM Plex Mono, Inter).
+
+Maintain glowing outlines, scanlines, and animated cursor-like indicators.
+
+All UI panels should look like hardware modules in a forensic analysis workstation.
+
+🧭 2. Application Structure (keep existing layout but upgrade it)
+
+The screen must remain divided into these zones:
+
+Left column: Target Input + System Log
+
+Right main panel: Results, Derived Data, Tools (Key Derivation, Live Mempool, Block Scanner)
+
+Top header: Application title, navigation tabs, status indicators
+
+Upgrade all components to be sharper, more consistent, and functional.
+
+🎯 3. TARGET ADDRESS MODULE (left side)
+
+Upgrade the “Target Address” block:
+
+Add fields:
+
+Bitcoin Address
+
+Scan Depth selector (e.g., latest 50 / 100 / all)
+
+Add buttons:
+
+[Fetch TXs]
+
+[Export Raw Data]
+
+Add a diagnostic line under input:
+
+“API Status: OK / Error / Rate Limited”
+
+Keep the illuminated “INITIATE SCAN” button but modernize the glow and border.
+
+📟 4. SYSTEM LOG PANEL (left bottom)
+
+Upgrade the System Log to look like a live terminal:
+
+Auto-scroll output
+
+Timestamp each event
+
+Add filter tabs:
+
+All
+
+Warnings
+
+API
+
+KeyGen
+
+Add a blinking cursor animation at bottom (“awaiting events…”)
+
+🧩 5. MAIN PANEL — Upgrade All Functional Tabs
+A. Key Derivation (default tab)
+
+Current block should be expanded into a full workflow:
+
+Input Section:
+
+Display fetched TXIDs as selectable rows.
+
+Add toggles:
+
+“Use txid as entropy (synthetic)”
+
+“Derive BTC formats: Legacy / P2SH-P2WPKH / Bech32”
+
+“Derive synthetic ETH address”
+
+Derived Data Table:
+
+Columns:
+
+Source TXID
+
+Synthetic ETH Address
+
+Synthetic BTC (Legacy)
+
+Synthetic BTC (SegWit)
+
+Synthetic BTC (Bech32)
+
+Balance (BTC/ETH)
+
+Add actions:
+
+[Export BTC Data]
+
+[Export ETH Data]
+
+[Check Balances]
+
+Hover tooltips with additional hash info.
+
+Add subtle column glow when new data arrives.
+
+B. Live Mempool Tab
+
+Replace green placeholder tab with a full functional UI:
+
+Add components:
+
+Live mempool size graph (neon-line waveform)
+
+Table of unconfirmed transactions:
+
+TXID
+
+Fee rate (sat/vB)
+
+Total output
+
+First seen
+
+Filter bar:
+
+Min fee rate slider
+
+Search TXID box
+
+Refresh interval selector
+
+Add a flashing “LIVE DATA STREAM” indicator.
+
+C. Block Scanner Tab
+
+Upgrade this to a full block investigation interface:
+
+Input fields:
+
+Block height
+
+Block hash
+
+Buttons:
+
+[Scan Block]
+
+[Export Block Data]
+
+Block summary card:
+
+Height, Hash, Timestamp
+
+Miner
+
+Transaction count
+
+Total fees
+
+TX list panel with filters:
+
+Incoming / Outgoing
+
+High-fee
+
+Coinbase only
+
+Button:
+
+[Send Selected TXIDs to Key Derivation]
+
+🛰️ 6. TOP HEADER BAR UPGRADE
+
+Keep the green indicators but redesign them to be more high-tech:
+
+NODE: ONLINE / OFFLINE
+
+MEMPOOL: ACTIVE / IDLE
+
+API PING TIME: (ms)
+
+NETWORK HEIGHT: ######
+
+Add a small animated signal strength icon.
+
+🧰 7. NEW FEATURE MODULES TO ADD
+A. Balance Check Panel
+
+Add a modal that displays BTC and ETH balances for all generated synthetic addresses.
+
+Show:
+
+Balance
+
+First seen transaction
+
+Last activity
+
+B. Data Export Center
+
+Export:
+
+All derived BTC formats → [btc_<orig_address>.txt]
+
+All derived ETH addresses → [eth_<orig_address>.txt]
+
+Raw scan logs → .log
+
+C. Settings Panel
+
+Custom API endpoints
+
+RPC configuration
+
+Toggle “Always Mask Sensitive Data”
+
+🎨 8. Visual Enhancements
+
+Add subtle animated scanlines over panels.
+
+Add matrix-style falling characters in the background at 10% opacity.
+
+When hovering over TXIDs, show a neon tooltip popup with full hex and metadata.
+
+Add a “terminal audio click” indicator icon (visual only).
+
+📐 9. Responsiveness
+
+Desktop-first
+
+Collapsible left column for compact mode
+
+Auto-flow grid for tables when screen shrinks
+
+Goal: Produce a professional, cinematic cyber-forensic dashboard that feels like a mix of BlockSci, Chainalysis Reactor, and a hacker terminal—but polished and fully functional.
+
+Ensure every screen feels like an advanced blockchain investigation tool, with elegant glowing neon visuals and structured layouts.
